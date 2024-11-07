@@ -50,6 +50,21 @@ level_music = lambda l: pygame.mixer.Sound(f"api/assets/music/ingamemusic{l}.mp3
 stopped = False
 uploaded = False
 
+# Stats default del jugador (es cada número + 60)
+player_x, player_y = 30, 45
+player_left, player_right, player_image, player_back = None, None, None, None
+
+
+# Para la explosión de las bombas
+bombs = []
+bomb_counter = -1
+bomb_range = 120
+
+moving_up = False
+moving_down = False
+moving_left = False
+moving_right = False
+
 def upload_score():
     global uploaded
     uploaded = True
@@ -143,6 +158,9 @@ def reset():
     stopped = False
     start_game(level_number_tk + 1, root_tk, level_tk)
 
+def remove_inmunity():
+    global immune
+    immune = False
 
 def on_death(canvas: tk.Canvas):
     """
@@ -178,8 +196,7 @@ def on_death(canvas: tk.Canvas):
         player_x, player_y = 30, 45
         hearts -= 1
         canvas.coords(player, 30, 45)
-        time.sleep(2)
-        immune = False
+        canvas.after(3000, remove_inmunity)
 
 
 def generate_borders(level: tk.Canvas, window: tk.Toplevel, size, height):
@@ -376,7 +393,7 @@ def main_bucle(c_info: tk.Canvas, c_game: tk.Canvas, i_h, g_h, window: tk.Toplev
     :param key_widget: cuadro donde va la llave
     :return: bucle infinito
     """
-    global image_set, tiempo
+    global image_set, tiempo, has_key, player_x, player_y, moving_up, moving_down, moving_left, moving_right, stopped
     initial_time = time.time()
     text_time = c_info.create_text(
         0, i_h // 3,
@@ -415,6 +432,7 @@ def main_bucle(c_info: tk.Canvas, c_game: tk.Canvas, i_h, g_h, window: tk.Toplev
     )
     # Actualiza las stats en tiempo real
     while not stopped:
+        x, y = 0, 0
         if not image_set and has_key:
             img = ImageTk.PhotoImage(Image.open("api/assets/images/key.png").resize((60, 60)))
             window.key_img_widget = img
@@ -428,9 +446,41 @@ def main_bucle(c_info: tk.Canvas, c_game: tk.Canvas, i_h, g_h, window: tk.Toplev
             c_info.itemconfig(score_text, text=f"{score}")
             c_info.itemconfig(b, text=f"{bombs_len}")
 
-# Stats default del jugador (es cada número + 60)
-player_x, player_y = 30, 45
+        image = player_image
+        if moving_up and not is_collision(player_x + 60, player_y + 45, collisions):
+            y = -15
+            image = player_back
+        elif moving_down and not is_collision(player_x + 60, player_y + 65, collisions):
+            y = 15
+        elif moving_left and not is_collision(player_x + 45, player_y + 60, collisions):
+            x = -15
+            image = player_left
+        elif moving_right and not is_collision(player_x + 65, player_y + 60, collisions):
+            x = 15
+            image = player_right
+        
+        
+        # En este instante del código, no estarán vacías estas coords
+        tx0, ty0, tx1, ty1, timg = trapdoor_coords
+        kx0, ky0, kx1, ky1, kimg = key_coords
+        cpx, cpy = player_x + x + 60, player_y + y + 60
 
+        if has_key and tx0 <= cpx <= tx1 and ty0 <= cpy <= ty1:
+            if dead or score <= level_number_tk * 750:
+                deny_sfx.play()
+            else:
+                on_win(c_game)
+
+        elif not has_key:
+            if kx0 + 15 <= cpx <= kx1 - 15 and ky0 + 15 <= cpy <= ky1 - 15:
+                key_pick_sfx.play()
+                has_key = True
+                c_game.delete(kimg)
+        
+        player_x, player_y = x + player_x, y + player_y
+        c_game.itemconfig(player, image=image)
+        c_game.move(player, x, y)
+        
 
 def move(event, to: str, player, player_hitbox, canvas, image):
     """
@@ -443,38 +493,36 @@ def move(event, to: str, player, player_hitbox, canvas, image):
     :param image: Imagen que se pone, dependiendo de la dirección
     :return: None
     """
-    global player_x, player_y, has_key
-    x, y = 0, 0
+    global player_x, player_y, has_key, moving_up, moving_down, moving_left, moving_right   
 
     if to == "left" and not is_collision(player_x + 45, player_y + 60, collisions):
-        x = -15
-    elif to == "right" and not is_collision(player_x + 65, player_y + 60, collisions):
-        x = 15
-    elif to == "up" and not is_collision(player_x + 60, player_y + 45, collisions):
-        y = -15
-    elif to == "down" and not is_collision(player_x + 60, player_y + 65, collisions):
-        y = 15
+        moving_left = True
+    if to == "right" and not is_collision(player_x + 65, player_y + 60, collisions):
+        moving_right = True
+    if to == "up" and not is_collision(player_x + 60, player_y + 45, collisions):
+        moving_up = True
+    if to == "down" and not is_collision(player_x + 60, player_y + 65, collisions):
+        moving_down = True
 
-    # En este instante del código, no estarán vacías estas coords
-    tx0, ty0, tx1, ty1, timg = trapdoor_coords
-    kx0, ky0, kx1, ky1, kimg = key_coords
-    cpx, cpy = player_x + x + 60, player_y + y + 60
-
-    if has_key and tx0 <= cpx <= tx1 and ty0 <= cpy <= ty1:
-        if dead or score <= level_number_tk * 750:
-            deny_sfx.play()
-        else:
-            on_win(canvas)
-
-    elif not has_key:
-        if kx0 + 15 <= cpx <= kx1 - 15 and ky0 + 15 <= cpy <= ky1 - 15:
-            key_pick_sfx.play()
-            has_key = True
-            canvas.delete(kimg)
-
-    player_x, player_y = x + player_x, y + player_y
-    canvas.itemconfig(player, image=image)
-    canvas.move(player, x, y)
+def move_release(event, to: str, player, player_hitbox, canvas, image):
+    """
+    :param event: Evento necesario para los binds
+    :param to: Dirección del movimiento
+    :param player: ID de la imagen del jugador
+    :param player_hitbox: No se utiliza
+    :param canvas: Canvas del juego
+    :param image: Imagen que se pone, dependiendo de la dirección
+    :return: None
+    """
+    global moving_up, moving_down, moving_left, moving_right
+    if to == "left":
+        moving_left = False
+    if to == "right":
+        moving_right = False
+    if to == "up":
+        moving_up = False
+    if to == "down":
+        moving_down = False
 
 
 def is_collision(x, y, l, destroy=False, canvas: tk.Canvas = None, hitrange: int = 0):
@@ -509,11 +557,6 @@ def propagation_ratio(initial_time, final_time):
     return round(-16 * (x - (1 / 4)) ** 2 + 1, 2)
 
 
-bombs = []
-bomb_counter = -1
-bomb_range = 120
-
-
 def plant_bomb(canvas):
     """
     :param canvas: canvas del juego
@@ -530,11 +573,12 @@ def plant_bomb(canvas):
 
     bomb_sfx.play()
     bomb_counter += 1
+    
     exp_x = ((player_x + 60) // 60) * 60 + 30
     exp_y = ((player_y + 60) // 60) * 60 + 30
     exp_h = exp_y
     exp_l = exp_x
-
+    
     img_bomb = ImageTk.PhotoImage(Image.open("api/assets/images/bomb.png").resize((60, 60)))
     setattr(canvas, f"img{bomb_counter}", img_bomb)
     img = canvas.create_image(
@@ -542,7 +586,13 @@ def plant_bomb(canvas):
         image=img_bomb,
         anchor="nw"
     )
+    
+    canvas.after(2000, start_bomb_thread, canvas, img, exp_x, exp_y, exp_l, exp_h)
+    
 
+def start_bomb_thread(canvas, img, exp_x, exp_y, exp_l, exp_h):
+    global bombs, immune, bomb_counter, bombs_len, hearts
+    
     horizontal_line_positive = canvas.create_line(exp_x, exp_y, exp_x, exp_y, width=0,
                                                   fill="#ffffff")
     horizontal_line_negative = canvas.create_line(exp_x, exp_y, exp_x, exp_y, width=0,
@@ -551,8 +601,7 @@ def plant_bomb(canvas):
                                                 fill="#ffffff")
     vertical_line_negative = canvas.create_line(exp_x, exp_y, exp_x, exp_y, width=0,
                                                 fill="#ffffff")
-    bomb_idx = bomb_counter
-    time.sleep(2)
+    bomb_idx = len(bombs)
     explosion_sfx.play()
     bombs.append([
         exp_x, exp_y, exp_l, exp_h, 0, 0, 0.0, 0.0, 0.0, 0.0, True
@@ -564,7 +613,6 @@ def plant_bomb(canvas):
         time.time(), horizontal_line_positive, vertical_line_positive, horizontal_line_negative, vertical_line_negative,
         canvas, 10, bomb_idx,))
     t.start()
-
 
 def bomb_thread(e, canvas):
     t = Thread(target=plant_bomb, args=(canvas,))
@@ -593,7 +641,6 @@ def draw_bomb(ti, horizontal_p_id, vertical_p_id, horizontal_n_id, vertical_n_id
     ]
     """
     global bombs, hearts, player_x, player_y, immune, bomb_counter
-    time.sleep(0.05)
     t = time.time() - ti
     exp_x, exp_y, exp_l, exp_h, negative_l, negative_h, locked_ratio_x_p, locked_ratio_y_p, locked_ratio_x_n, locked_ratio_y_n, exploding = \
         bombs[bomb_index]
@@ -628,7 +675,7 @@ def draw_bomb(ti, horizontal_p_id, vertical_p_id, horizontal_n_id, vertical_n_id
         canvas.itemconfig(horizontal_p_id, width=width * ratio)
         canvas.itemconfig(vertical_p_id, width=width * ratio)
         canvas.itemconfig(vertical_n_id, width=width * ratio)
-        draw_bomb(ti, horizontal_p_id, vertical_p_id, horizontal_n_id, vertical_n_id, canvas, width, bomb_index)
+        level_tk.after(50, draw_bomb, ti, horizontal_p_id, vertical_p_id, horizontal_n_id, vertical_n_id, canvas, width, bomb_index)
     else:
         # Resetea la bomba cuando pasa medio segundo
         bombs[bomb_index][10] = False
@@ -780,7 +827,6 @@ def move_enemy(enemy_index, canvas):
     :return: None
     """
     global enemies, score
-    time.sleep(0.005)
     enemy_coordinates, limits, speed, enemy_id, direction, alive = enemies[enemy_index]
     new_pos_x = direction * speed
     new_pos_y = direction * speed
@@ -834,9 +880,10 @@ def move_each_enemy(i, canvas):
     :param canvas: canvas del enemigo
     :return: None
     """
-    if i == len(enemies):
+    if i >= len(enemies):
         return
-    move_enemy(i, canvas)
+    
+    root_tk.after(1, move_enemy, i, canvas)
     return move_each_enemy(i + 1, canvas)
 
 
@@ -849,7 +896,7 @@ def start_game(level_number: int, root: tk.Tk, levels):
     :param levels: toplevel de la selección de niveles
     :return: None
     """
-    global player, canva_info, level_tk, level_number_tk, current_level_tk, root_tk, music
+    global player, canva_info, level_tk, level_number_tk, current_level_tk, root_tk, music, player_left, player_right, player_back, player_image, key_space, key_pick_sfx, bomb_sfx, deny_sfx, explosion_sfx
     pygame.mixer.music.stop()
 
     # Reescribe las variables globales
@@ -948,13 +995,19 @@ def start_game(level_number: int, root: tk.Tk, levels):
         image=None,
         anchor="center"
     )
-    level_window.bind("<Left>", lambda e: move(e, "left", player, player_hitbox, canva_level, player_left))
-    level_window.bind("<Right>", lambda e: move(e, "right", player, player_hitbox, canva_level, player_right))
-    level_window.bind("<Up>", lambda e: move(e, "up", player, player_hitbox, canva_level, player_back))
-    level_window.bind("<Down>", lambda e: move(e, "down", player, player_hitbox, canva_level, player_image))
-    level_window.bind("<space>", lambda e: bomb_thread(e, canva_level))
-    level_window.bind("q", lambda e: exit_game(levels, level_window))
+    level_window.bind("<KeyPress-Left>", lambda e: move(e, "left", player, player_hitbox, canva_level, player_left), add="+")
+    level_window.bind("<KeyPress-Right>", lambda e: move(e, "right", player, player_hitbox, canva_level, player_right), add="+")
+    level_window.bind("<KeyPress-Up>", lambda e: move(e, "up", player, player_hitbox, canva_level, player_back), add="+")
+    level_window.bind("<KeyPress-Down>", lambda e: move(e, "down", player, player_hitbox, canva_level, player_image), add="+")
+    level_window.bind("<KeyPress-space>", lambda e: bomb_thread(e, canva_level), add="+")
+    level_window.bind("q", lambda e: exit_game(levels, level_window), add="+")
 
+    level_window.bind("<KeyRelease-Left>", lambda e: move_release(e, "left", player, player_hitbox, canva_level, player_left), add="+")
+    level_window.bind("<KeyRelease-Right>", lambda e: move_release(e, "right", player, player_hitbox, canva_level, player_right), add="+")
+    level_window.bind("<KeyRelease-Up>", lambda e: move_release(e, "up", player, player_hitbox, canva_level, player_back), add="+")
+    level_window.bind("<KeyRelease-Down>", lambda e: move_release(e, "down", player, player_hitbox, canva_level, player_image), add="+")
+    
+    
     # Agarra los paths más largos
     for_replacement(
         lambda x: get_paths_x(canva_level, y=x), j=game_height
