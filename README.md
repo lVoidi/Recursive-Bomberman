@@ -2,7 +2,7 @@
 The goal of this project is to create a simple bomberman game, but with a twist. The real challenge with 
 this game comes with the fact that you **cant use object-oriented programming** or pygame (i mean, 
 you can use pygame only for the music). And, as the title says,
-it needs to be exclusively recursive. That means that iteration is forbidden. This is a project for CE1101,
+it needs to be exclusively recursive. That means that iteration is forbidden. Also, object-oriented programming is also forbidden for this game. This is a project for CE1101,
 Computer Engineering, Costa Rica Institute of Technology. Further information (in spanish) in ***documentacion.pdf***
 
 ## Installation
